@@ -1,4 +1,5 @@
 ﻿using Gma.System.MouseKeyHook;
+using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -24,6 +25,7 @@ namespace WindowTimer
 
         private DateTime _lastActivity = DateTime.Now;
         private bool _active = true;
+        private bool _locked = false;
 
         private DateTime _windowActivatedTime;
         private String _currentWindow;
@@ -50,6 +52,8 @@ namespace WindowTimer
             _globalHook = Hook.GlobalEvents();
             _globalHook.KeyPress += ( sender, e ) => LogUserActivity();
             _globalHook.MouseMove += ( sender, e ) => LogUserActivity();
+
+            SystemEvents.SessionSwitch += HandleSessionSwitch;
         }
 
         private void InitializeNotifyIcon()
@@ -72,6 +76,21 @@ namespace WindowTimer
             {
                 e.Cancel = true;
                 this.MinimizeToSystemTray();
+            }
+        }
+
+        private void HandleSessionSwitch( Object sender, SessionSwitchEventArgs e )
+        {
+            if( e.Reason == SessionSwitchReason.SessionLock )
+            {
+                _locked = true;
+                EndCurrentWindowLog( DateTime.Now, null );
+                _log.AddEntry( "LOCK", DateTime.Now, DateTime.Now );
+            }
+            else if( e.Reason == SessionSwitchReason.SessionUnlock )
+            {
+                _locked = false;
+                _log.AddEntry( "UNLOCK", DateTime.Now, DateTime.Now );
             }
         }
 
@@ -103,7 +122,7 @@ namespace WindowTimer
 
         private void LogUserActivity()
         {
-            if( !_monitoring )
+            if( !_monitoring || _locked )
             {
                 return;
             }
@@ -115,6 +134,10 @@ namespace WindowTimer
 
         private void Monitor()
         {
+            if( _locked )
+            {
+                return;
+            }
             DateTime now = DateTime.Now;
 
             String foregroundWindow = Native.GetForegroundWindowTitle();
